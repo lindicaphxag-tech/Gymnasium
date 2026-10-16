@@ -32,3 +32,31 @@ def test_sample_probabilities():
     for i in range(4):
         counts = np.sum(samples[:, i]) / len(samples)
         np.testing.assert_allclose(counts, probabilities[i], atol=0.05)
+
+
+class ZeroRandomGenerator(np.random.Generator):
+    def random(self, *args, **kwargs):
+        size = kwargs.get("size", args[0] if args else None)
+        return np.zeros(size)
+
+
+def test_sample_probability_zero_never_selects_one_at_zero_draw():
+    space = MultiBinary(3)
+    space.np_random = ZeroRandomGenerator(np.random.PCG64(0))
+    probability = np.array([0.0, 1.0, 0.5], dtype=np.float64)
+
+    sample = space.sample(probability=probability)
+
+    # NumPy's random() is allowed to return exactly zero. A strict comparison
+    # keeps a zero-probability Bernoulli outcome impossible at that endpoint.
+    np.testing.assert_array_equal(sample, np.array([0, 1, 1], dtype=np.int8))
+
+
+def test_sample_probability_one_remains_one_at_zero_draw():
+    space = MultiBinary(2)
+    space.np_random = ZeroRandomGenerator(np.random.PCG64(1))
+    probability = np.array([1.0, 0.0], dtype=np.float64)
+
+    sample = space.sample(probability=probability)
+
+    np.testing.assert_array_equal(sample, np.array([1, 0], dtype=np.int8))
