@@ -118,3 +118,21 @@ def test_invalid_sample_inputs():
     # Invalid probability type
     with pytest.raises(AssertionError, match="Expected type of `probability` is tuple"):
         space.sample(probability=[0.5, 0.5])
+
+
+
+def test_oneof_jsonable_roundtrip_with_dict_and_tuple():
+    from gymnasium.spaces import Box, Dict, Discrete, OneOf, Tuple
+
+    spaces = [
+        OneOf((Dict({"position": Box(0, 1, shape=(2,)), "label": Discrete(3)}), Discrete(2))),
+        OneOf((Tuple((Box(0, 1, shape=(2,)), Discrete(3))), Discrete(2))),
+    ]
+
+    for space in spaces:
+        sample = space.sample()
+        encoded = space.to_jsonable([sample])
+        restored = space.from_jsonable(encoded)
+
+        assert len(restored) == 1
+        assert space.contains(restored[0])
