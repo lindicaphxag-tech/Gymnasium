@@ -8,6 +8,7 @@ from typing import Any, Generic, TypeVar
 import numpy as np
 
 from gymnasium.spaces.space import Space
+from gymnasium.spaces.tuple import Tuple
 
 _T_co = TypeVar("_T_co", covariant=True)
 
@@ -174,20 +175,36 @@ class OneOf(Space[tuple[int, _T_co]], Generic[_T_co]):
 
     def to_jsonable(self, sample_n: Iterable[tuple[int, Any]]) -> list[list[Any]]:
         """Convert a batch of samples from this space to a JSONable data type."""
-        return [
-            [int(i), self.spaces[i].to_jsonable([subsample])[0]]
-            for (i, subsample) in sample_n
-        ]
+        serialized_samples = []
+        for i, subsample in sample_n:
+            space = self.spaces[i]
+            serialized = space.to_jsonable([subsample])
+
+            # Fundamental spaces encode a single sample as a one-item batch, while
+            # composite spaces such as Dict/Tuple use the batch structure itself.
+            # Preserve the historical representation for fundamental spaces, but
+            # retain the full representation for composite spaces.
+            if isinstance(serialized, dict) or isinstance(space, Tuple):
+                jsonable_sample = serialized
+            else:
+                jsonable_sample = serialized[0]
+
+            serialized_samples.append([int(i), jsonable_sample])
+        return serialized_samples
 
     def from_jsonable(self, sample_n: list[list[Any]]) -> list[tuple[Any, ...]]:
         """Convert a JSONable data type to a batch of samples from this space."""
-        return [
-            (
-                np.int64(space_idx),
-                self.spaces[space_idx].from_jsonable([jsonable_sample])[0],
-            )
-            for space_idx, jsonable_sample in sample_n
-        ]
+        restored = []
+        for space_idx, jsonable_sample in sample_n:
+            space = self.spaces[space_idx]
+
+            if isinstance(jsonable_sample, dict) or isinstance(space, Tuple):
+                subsample = space.from_jsonable(jsonable_sample)[0]
+            else:
+                subsample = space.from_jsonable([jsonable_sample])[0]
+
+            restored.append((np.int64(space_idx), subsample))
+        return restored
 
     def __getitem__(self, index: int) -> Space[_T_co]:
         """Get the subspace at specific `index`."""
